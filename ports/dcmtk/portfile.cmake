@@ -7,6 +7,7 @@ vcpkg_from_github(
     PATCHES
         dcmtk.patch
         fix_link_xml2.patch
+        use_jpeg-turbo.patch
 )
 
 vcpkg_check_features(OUT_FEATURE_OPTIONS FEATURE_OPTIONS
@@ -21,6 +22,10 @@ vcpkg_check_features(OUT_FEATURE_OPTIONS FEATURE_OPTIONS
         "tools"   BUILD_APPS
 )
 
+file(REMOVE_RECURSE "${SOURCE_PATH}/dcmjpeg/libijg8")
+file(REMOVE_RECURSE "${SOURCE_PATH}/dcmjpeg/libijg12")
+file(REMOVE_RECURSE "${SOURCE_PATH}/dcmjpeg/libijg16")
+
 vcpkg_cmake_configure(
     SOURCE_PATH "${SOURCE_PATH}"
     OPTIONS
@@ -34,12 +39,11 @@ vcpkg_cmake_configure(
         -DDCMTK_WIDE_CHAR_MAIN_FUNCTION=ON
         -DDCMTK_ENABLE_STL=ON
         -DCMAKE_DEBUG_POSTFIX=d
+        -DDCMTK_USE_FIND_PACKAGE=ON
     OPTIONS_DEBUG
         -DINSTALL_HEADERS=OFF
         -DINSTALL_OTHER=OFF
         -DBUILD_APPS=OFF
-    MAYBE_UNUSED_VARIABLES
-        -DDCMTK_USE_FIND_PACKAGE_WIN_DEFAULT=ON
 )
 
 vcpkg_cmake_install()

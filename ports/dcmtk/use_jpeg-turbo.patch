@@ -1,0 +1,614 @@
+diff --git a/CMake/3rdparty.cmake b/CMake/3rdparty.cmake
+index c3559229a..acaa6619c 100644
+--- a/CMake/3rdparty.cmake
++++ b/CMake/3rdparty.cmake
+@@ -1,7 +1,7 @@
+ set(USE_FIND_PACKAGE_DOCS "Control whether libraries are searched via CMake's find_package() mechanism or a Windows specific fallback")
+ # Advanced user (eg. vcpkg) may want to override this:
+ if(NOT DEFINED DCMTK_USE_FIND_PACKAGE_WIN_DEFAULT)
+-  set(DCMTK_USE_FIND_PACKAGE_WIN_DEFAULT FALSE)
++  set(DCMTK_USE_FIND_PACKAGE_WIN_DEFAULT TRUE)
+ endif()
+ if(WIN32)
+   # For Windows, we don't use FIND_PACKAGE because DCMTK usually is used with its
+@@ -23,6 +23,7 @@ endif()
+ mark_as_advanced(DCMTK_USE_FIND_PACKAGE)
+ 
+ if(DCMTK_USE_FIND_PACKAGE)
++  find_package(JPEG REQUIRED)
+   # Find TIFF
+   if(DCMTK_WITH_TIFF)
+     find_package(TIFF QUIET)
+@@ -34,7 +35,6 @@ if(DCMTK_USE_FIND_PACKAGE)
+     else()
+       set(WITH_LIBTIFF 1)
+       # libtiff can be compiled with libjpeg support; if available, add libjpeg to library and include path
+-      find_package(JPEG QUIET)
+       if(NOT JPEG_FOUND)
+         message(STATUS "Info: DCMTK TIFF support will be enabled (but without JPEG)")
+         include_directories(${TIFF_INCLUDE_DIR})
+@@ -42,7 +42,7 @@ if(DCMTK_USE_FIND_PACKAGE)
+         message(STATUS "Info: DCMTK TIFF support will be enabled")
+         include_directories(${TIFF_INCLUDE_DIR} ${JPEG_INCLUDE_DIR})
+       endif()
+-      set(LIBTIFF_LIBS ${TIFF_LIBRARY} ${TIFF_EXTRA_LIBS_STATIC} ${JPEG_LIBRARY})
++      set(LIBTIFF_LIBS ${TIFF_LIBRARIES})
+     endif()
+   endif()
+ 
+diff --git a/dcmjpeg/CMakeLists.txt b/dcmjpeg/CMakeLists.txt
+index 0e995bf8c..de74edf70 100644
+--- a/dcmjpeg/CMakeLists.txt
++++ b/dcmjpeg/CMakeLists.txt
+@@ -2,6 +2,6 @@
+ project(dcmjpeg)
+ 
+ # recurse into subdirectories
+-foreach(SUBDIR libsrc libijg8 libijg12 libijg16 apps include)
++foreach(SUBDIR libsrc apps include)
+   add_subdirectory(${SUBDIR})
+ endforeach()
+diff --git a/dcmjpeg/apps/CMakeLists.txt b/dcmjpeg/apps/CMakeLists.txt
+index 0b6a08553..b4d7c9129 100644
+--- a/dcmjpeg/apps/CMakeLists.txt
++++ b/dcmjpeg/apps/CMakeLists.txt
+@@ -8,5 +8,5 @@ endforeach()
+ 
+ # make sure executables are linked to the corresponding libraries
+ foreach(PROGRAM dcmcjpeg dcmdjpeg dcmj2pnm dcmmkdir)
+-  DCMTK_TARGET_LINK_MODULES(${PROGRAM} dcmjpeg ijg8 ijg12 ijg16 dcmimage dcmimgle dcmdata oflog ofstd)
++  DCMTK_TARGET_LINK_MODULES(${PROGRAM} dcmjpeg dcmimage dcmimgle dcmdata oflog ofstd)
+ endforeach()
+diff --git a/dcmjpeg/libsrc/CMakeLists.txt b/dcmjpeg/libsrc/CMakeLists.txt
+index a393efa68..64b0ba732 100644
+--- a/dcmjpeg/libsrc/CMakeLists.txt
++++ b/dcmjpeg/libsrc/CMakeLists.txt
+@@ -1,5 +1,5 @@
+ # declare additional include directories
+-include_directories("${dcmjpeg_SOURCE_DIR}/include" "${ofstd_SOURCE_DIR}/include" "${oflog_SOURCE_DIR}/include" "${dcmdata_SOURCE_DIR}/include" "${dcmimgle_SOURCE_DIR}/include" "${dcmimage_SOURCE_DIR}/include" "${dcmjpeg_SOURCE_DIR}/libijg8" "${dcmjpeg_SOURCE_DIR}/libijg12" "${dcmjpeg_SOURCE_DIR}/libijg16" ${ZLIB_INCDIR})
++include_directories("${dcmjpeg_SOURCE_DIR}/include" "${ofstd_SOURCE_DIR}/include" "${oflog_SOURCE_DIR}/include" "${dcmdata_SOURCE_DIR}/include" "${dcmimgle_SOURCE_DIR}/include" "${dcmimage_SOURCE_DIR}/include" ${ZLIB_INCDIR})
+ 
+ # create library from source files
+ DCMTK_ADD_LIBRARY(dcmjpeg
+@@ -33,4 +33,4 @@ DCMTK_ADD_LIBRARY(dcmjpeg
+   djutils.cc
+ )
+ 
+-DCMTK_TARGET_LINK_MODULES(dcmjpeg ofstd oflog dcmdata dcmimgle dcmimage ijg8 ijg12 ijg16)
++DCMTK_TARGET_LINK_MODULES(dcmjpeg ofstd oflog dcmdata dcmimgle dcmimage JPEG::JPEG)
+diff --git a/dcmjpeg/libsrc/dipijpeg.cc b/dcmjpeg/libsrc/dipijpeg.cc
+index 7b76be44b..9dab20a02 100644
+--- a/dcmjpeg/libsrc/dipijpeg.cc
++++ b/dcmjpeg/libsrc/dipijpeg.cc
+@@ -29,12 +29,11 @@
+ #include <csetjmp>
+ 
+ BEGIN_EXTERN_C
+-#define boolean ijg_boolean
+-#include "jpeglib8.h"
+-#include "jerror8.h"
+-#include "jpegint8.h"
+-#include "jversion8.h"
+-#undef boolean
++#include "jconfig.h"
++#include "jpeglib.h"
++#include "jerror.h"
++// #include "jpegint.h"
++// #include "jversion.h"
+ 
+ // disable any preprocessor magic the IJG library might be doing with the "const" keyword
+ #ifdef const
+@@ -246,8 +245,11 @@ int DiJPEGPlugin::write(DiImage *image,
+ #include DCMTK_DIAGNOSTIC_POP
+ 
+ 
++#define DCMTK_LOCAL_STRINGIFY(x) #x
++#define DCMTK_LOCAL_TOSTRING(x) DCMTK_LOCAL_STRINGIFY(x)
++
+ OFString DiJPEGPlugin::getLibraryVersionString()
+ {
+     /* create version information */
+-    return "IJG, Version " JVERSION " (modified)";
++    return "libjpeg-turbo, Version " DCMTK_LOCAL_TOSTRING(LIBJPEG_TURBO_VERSION);
+ }
+diff --git a/dcmjpeg/libsrc/djdijg12.cc b/dcmjpeg/libsrc/djdijg12.cc
+index 36e45ee5a..613db8890 100644
+--- a/dcmjpeg/libsrc/djdijg12.cc
++++ b/dcmjpeg/libsrc/djdijg12.cc
+@@ -38,10 +38,8 @@
+ #endif
+ 
+ BEGIN_EXTERN_C
+-#define boolean ijg_boolean
+-#include "jpeglib12.h"
+-#include "jerror12.h"
+-#undef boolean
++#include "jpeglib.h"
++#include "jerror.h"
+ 
+ // disable any preprocessor magic the IJG library might be doing with the "const" keyword
+ #ifdef const
+@@ -90,7 +88,7 @@ struct DJDIJG12SourceManagerStruct
+ void DJDIJG12ErrorExit(j_common_ptr);
+ void DJDIJG12EmitMessage(j_common_ptr cinfo, int msg_level);
+ void DJDIJG12initSource(j_decompress_ptr);
+-ijg_boolean DJDIJG12fillInputBuffer(j_decompress_ptr);
++boolean DJDIJG12fillInputBuffer(j_decompress_ptr);
+ void DJDIJG12skipInputData(j_decompress_ptr, long);
+ void DJDIJG12termSource(j_decompress_ptr);
+ 
+@@ -124,7 +122,7 @@ void DJDIJG12initSource(j_decompress_ptr /* cinfo */)
+ {
+ }
+ 
+-ijg_boolean DJDIJG12fillInputBuffer(j_decompress_ptr cinfo)
++boolean DJDIJG12fillInputBuffer(j_decompress_ptr cinfo)
+ {
+   DJDIJG12SourceManagerStruct *src = OFreinterpret_cast(DJDIJG12SourceManagerStruct*, cinfo->src);
+ 
+@@ -317,6 +315,8 @@ OFCondition DJDecompressIJG12Bit::decode(
+       return EJ_Suspension;
+     }
+ 
++    const bool fileIsLossLess = cinfo->Ss != 0 && cinfo->Se == 0;
++
+     // check if color space conversion is enabled
+     OFBool colorSpaceConversion = OFFalse;
+     // check whether to use the IJG library guess for the JPEG color space
+@@ -327,7 +327,7 @@ OFCondition DJDecompressIJG12Bit::decode(
+         colorSpaceConversion = dicomPhotometricInterpretationIsYCbCr;
+         break;
+       case EDC_lossyOnly: // color space conversion if lossy JPEG
+-        if (cinfo->process != JPROC_LOSSLESS)
++        if (!fileIsLossLess)
+           colorSpaceConversion = OFTrue;
+         break;
+       case EDC_always: // always do color space conversion
+@@ -336,7 +336,7 @@ OFCondition DJDecompressIJG12Bit::decode(
+       case EDC_never: // never do color space conversion
+         break;
+       case EDC_guessLossyOnly: // use color space guess by IJG library if lossy JPEG
+-        if (cinfo->process != JPROC_LOSSLESS)
++        if (!fileIsLossLess)
+         {
+           colorSpaceGuess = OFTrue;
+           if (cinfo->jpeg_color_space == JCS_YCbCr)
+@@ -407,7 +407,7 @@ OFCondition DJDecompressIJG12Bit::decode(
+     }
+   }
+ 
+-  JSAMPARRAY buffer = NULL;
++  J12SAMPARRAY buffer = NULL;
+   int bufsize = 0;
+   size_t rowsize = 0;
+ 
+@@ -419,23 +419,24 @@ OFCondition DJDecompressIJG12Bit::decode(
+       return EJ_Suspension;
+     }
+     bufsize = cinfo->output_width * cinfo->output_components; // number of JSAMPLEs per row
+-    rowsize = bufsize * sizeof(JSAMPLE); // number of bytes per row
+-    buffer = (*cinfo->mem->alloc_sarray)(OFreinterpret_cast(j_common_ptr, cinfo), JPOOL_IMAGE, bufsize, 1);
++    rowsize = bufsize * sizeof(J12SAMPLE); // number of bytes per row
++    cinfo->data_precision = 12;
++    buffer = OFreinterpret_cast(J12SAMPARRAY, ((*cinfo->mem->alloc_sarray)(OFreinterpret_cast(j_common_ptr, cinfo), JPOOL_IMAGE, bufsize, 1)));
+     if (buffer == NULL) return EC_MemoryExhausted;
+     jsampBuffer = buffer;
+   }
+   else
+   {
+     bufsize = cinfo->output_width * cinfo->output_components;
+-    rowsize = bufsize * sizeof(JSAMPLE);
+-    buffer = OFreinterpret_cast(JSAMPARRAY, jsampBuffer);
++    rowsize = bufsize * sizeof(J12SAMPLE);
++    buffer = OFreinterpret_cast(J12SAMPARRAY, jsampBuffer);
+   }
+ 
+   if (uncompressedFrameBufferSize < rowsize * cinfo->output_height) return EJ_IJG12_FrameBufferTooSmall;
+ 
+   while (cinfo->output_scanline < cinfo->output_height)
+   {
+-    if (0 == jpeg_read_scanlines(cinfo, buffer, 1))
++    if (0 == jpeg12_read_scanlines(cinfo, buffer, 1))
+     {
+       suspension = 3;
+       return EJ_Suspension;
+diff --git a/dcmjpeg/libsrc/djdijg16.cc b/dcmjpeg/libsrc/djdijg16.cc
+index 561297339..328a2e8af 100644
+--- a/dcmjpeg/libsrc/djdijg16.cc
++++ b/dcmjpeg/libsrc/djdijg16.cc
+@@ -38,10 +38,8 @@
+ #endif
+ 
+ BEGIN_EXTERN_C
+-#define boolean ijg_boolean
+-#include "jpeglib16.h"
+-#include "jerror16.h"
+-#undef boolean
++#include "jpeglib.h"
++#include "jerror.h"
+ 
+ // disable any preprocessor magic the IJG library might be doing with the "const" keyword
+ #ifdef const
+@@ -90,7 +88,7 @@ struct DJDIJG16SourceManagerStruct
+ void DJDIJG16ErrorExit(j_common_ptr);
+ void DJDIJG16EmitMessage(j_common_ptr cinfo, int msg_level);
+ void DJDIJG16initSource(j_decompress_ptr);
+-ijg_boolean DJDIJG16fillInputBuffer(j_decompress_ptr);
++boolean DJDIJG16fillInputBuffer(j_decompress_ptr);
+ void DJDIJG16skipInputData(j_decompress_ptr, long);
+ void DJDIJG16termSource(j_decompress_ptr);
+ 
+@@ -124,7 +122,7 @@ void DJDIJG16initSource(j_decompress_ptr /* cinfo */)
+ {
+ }
+ 
+-ijg_boolean DJDIJG16fillInputBuffer(j_decompress_ptr cinfo)
++boolean DJDIJG16fillInputBuffer(j_decompress_ptr cinfo)
+ {
+   DJDIJG16SourceManagerStruct *src = OFreinterpret_cast(DJDIJG16SourceManagerStruct*, cinfo->src);
+ 
+@@ -263,9 +261,9 @@ OFCondition DJDecompressIJG16Bit::init()
+     }
+     OFjpeg_create_decompress(cinfo);
+     cinfo->src = &OFconst_cast(DJDIJG16SourceManagerStruct*, src)->pub;
+-    cinfo->workaround_options = 0;
+-    if (cparam->predictor6WorkaroundEnabled()) cinfo->workaround_options |= WORKAROUND_PREDICTOR6OVERFLOW;
+-    if (cparam->cornellWorkaroundEnabled()) cinfo->workaround_options |= WORKAROUND_BUGGY_CORNELL_16BIT_JPEG_ENCODER;
++    // cinfo->workaround_options = 0;
++    // if (cparam->predictor6WorkaroundEnabled()) cinfo->workaround_options |= WORKAROUND_PREDICTOR6OVERFLOW;
++    // if (cparam->cornellWorkaroundEnabled()) cinfo->workaround_options |= WORKAROUND_BUGGY_CORNELL_16BIT_JPEG_ENCODER;
+   } else return EC_MemoryExhausted;
+ 
+   // everything OK
+@@ -320,6 +318,8 @@ OFCondition DJDecompressIJG16Bit::decode(
+       return EJ_Suspension;
+     }
+ 
++    const bool fileIsLossLess = cinfo->Ss != 0 && cinfo->Se == 0;
++
+     // check if color space conversion is enabled
+     OFBool colorSpaceConversion = OFFalse;
+     // check whether to use the IJG library guess for the JPEG color space
+@@ -330,7 +330,7 @@ OFCondition DJDecompressIJG16Bit::decode(
+         colorSpaceConversion = dicomPhotometricInterpretationIsYCbCr;
+         break;
+       case EDC_lossyOnly: // color space conversion if lossy JPEG
+-        if (cinfo->process != JPROC_LOSSLESS)
++        if (!fileIsLossLess)
+           colorSpaceConversion = OFTrue;
+         break;
+       case EDC_always: // always do color space conversion
+@@ -339,7 +339,7 @@ OFCondition DJDecompressIJG16Bit::decode(
+       case EDC_never: // never do color space conversion
+         break;
+       case EDC_guessLossyOnly: // use color space guess by IJG library if lossy JPEG
+-        if (cinfo->process != JPROC_LOSSLESS)
++        if (!fileIsLossLess)
+         {
+           colorSpaceGuess = OFTrue;
+           if (cinfo->jpeg_color_space == JCS_YCbCr)
+@@ -410,7 +410,7 @@ OFCondition DJDecompressIJG16Bit::decode(
+     }
+   }
+ 
+-  JSAMPARRAY buffer = NULL;
++  J16SAMPARRAY buffer = NULL;
+   int bufsize = 0;
+   size_t rowsize = 0;
+ 
+@@ -422,23 +422,24 @@ OFCondition DJDecompressIJG16Bit::decode(
+       return EJ_Suspension;
+     }
+     bufsize = cinfo->output_width * cinfo->output_components; // number of JSAMPLEs per row
+-    rowsize = bufsize * sizeof(JSAMPLE); // number of bytes per row
+-    buffer = (*cinfo->mem->alloc_sarray)(OFreinterpret_cast(j_common_ptr, cinfo), JPOOL_IMAGE, bufsize, 1);
++    rowsize = bufsize * sizeof(J16SAMPLE); // number of bytes per row
++    cinfo->data_precision = 16;
++    buffer = OFreinterpret_cast(J16SAMPARRAY, ((*cinfo->mem->alloc_sarray)(OFreinterpret_cast(j_common_ptr, cinfo), JPOOL_IMAGE, bufsize, 1)));
+     if (buffer == NULL) return EC_MemoryExhausted;
+     jsampBuffer = buffer;
+   }
+   else
+   {
+     bufsize = cinfo->output_width * cinfo->output_components;
+-    rowsize = bufsize * sizeof(JSAMPLE);
+-    buffer = OFreinterpret_cast(JSAMPARRAY, jsampBuffer);
++    rowsize = bufsize * sizeof(J16SAMPLE);
++    buffer = OFreinterpret_cast(J16SAMPARRAY, jsampBuffer);
+   }
+ 
+   if (uncompressedFrameBufferSize < rowsize * cinfo->output_height) return EJ_IJG16_FrameBufferTooSmall;
+ 
+   while (cinfo->output_scanline < cinfo->output_height)
+   {
+-    if (0 == jpeg_read_scanlines(cinfo, buffer, 1))
++    if (0 == jpeg16_read_scanlines(cinfo, buffer, 1))
+     {
+       suspension = 3;
+       return EJ_Suspension;
+diff --git a/dcmjpeg/libsrc/djdijg8.cc b/dcmjpeg/libsrc/djdijg8.cc
+index 79730b739..be05955f6 100644
+--- a/dcmjpeg/libsrc/djdijg8.cc
++++ b/dcmjpeg/libsrc/djdijg8.cc
+@@ -38,10 +38,8 @@
+ #endif
+ 
+ BEGIN_EXTERN_C
+-#define boolean ijg_boolean
+-#include "jpeglib8.h"
+-#include "jerror8.h"
+-#undef boolean
++#include "jpeglib.h"
++#include "jerror.h"
+ 
+ // disable any preprocessor magic the IJG library might be doing with the "const" keyword
+ #ifdef const
+@@ -91,7 +89,7 @@ struct DJDIJG8SourceManagerStruct
+ void DJDIJG8ErrorExit(j_common_ptr);
+ void DJDIJG8EmitMessage(j_common_ptr cinfo, int msg_level);
+ void DJDIJG8initSource(j_decompress_ptr);
+-ijg_boolean DJDIJG8fillInputBuffer(j_decompress_ptr);
++boolean DJDIJG8fillInputBuffer(j_decompress_ptr);
+ void DJDIJG8skipInputData(j_decompress_ptr, long);
+ void DJDIJG8termSource(j_decompress_ptr);
+ 
+@@ -125,7 +123,7 @@ void DJDIJG8initSource(j_decompress_ptr /* cinfo */)
+ {
+ }
+ 
+-ijg_boolean DJDIJG8fillInputBuffer(j_decompress_ptr cinfo)
++boolean DJDIJG8fillInputBuffer(j_decompress_ptr cinfo)
+ {
+   DJDIJG8SourceManagerStruct *src = OFreinterpret_cast(DJDIJG8SourceManagerStruct*, cinfo->src);
+ 
+@@ -318,6 +316,8 @@ OFCondition DJDecompressIJG8Bit::decode(
+       return EJ_Suspension;
+     }
+ 
++    const bool fileIsLossLess = cinfo->Ss != 0 && cinfo->Se == 0;
++
+     // check if color space conversion is enabled
+     OFBool colorSpaceConversion = OFFalse;
+     // check whether to use the IJG library guess for the JPEG color space
+@@ -328,7 +328,7 @@ OFCondition DJDecompressIJG8Bit::decode(
+         colorSpaceConversion = dicomPhotometricInterpretationIsYCbCr;
+         break;
+       case EDC_lossyOnly: // color space conversion if lossy JPEG
+-        if (cinfo->process != JPROC_LOSSLESS)
++        if (!fileIsLossLess)
+           colorSpaceConversion = OFTrue;
+         break;
+       case EDC_always: // always do color space conversion
+@@ -337,7 +337,7 @@ OFCondition DJDecompressIJG8Bit::decode(
+       case EDC_never: // never do color space conversion
+         break;
+       case EDC_guessLossyOnly: // use color space guess by IJG library if lossy JPEG
+-        if (cinfo->process != JPROC_LOSSLESS)
++        if (!fileIsLossLess)
+         {
+           colorSpaceGuess = OFTrue;
+           if (cinfo->jpeg_color_space == JCS_YCbCr)
+@@ -421,6 +421,7 @@ OFCondition DJDecompressIJG8Bit::decode(
+     }
+     bufsize = cinfo->output_width * cinfo->output_components; // number of JSAMPLEs per row
+     rowsize = bufsize * sizeof(JSAMPLE); // number of bytes per row
++    cinfo->data_precision = 8;
+     buffer = (*cinfo->mem->alloc_sarray)(OFreinterpret_cast(j_common_ptr, cinfo), JPOOL_IMAGE, bufsize, 1);
+     if (buffer == NULL) return EC_MemoryExhausted;
+     jsampBuffer = buffer;
+diff --git a/dcmjpeg/libsrc/djeijg12.cc b/dcmjpeg/libsrc/djeijg12.cc
+index 9ff7292d8..d09257c83 100644
+--- a/dcmjpeg/libsrc/djeijg12.cc
++++ b/dcmjpeg/libsrc/djeijg12.cc
+@@ -41,11 +41,9 @@
+ #define IJGE12_BLOCKSIZE 16384
+ 
+ BEGIN_EXTERN_C
+-#define boolean ijg_boolean
+-#include "jpeglib12.h"
+-#include "jerror12.h"
+-#include "jpegint12.h"
+-#undef boolean
++#include "jpeglib.h"
++#include "jerror.h"
++// #include "jpegint.h"
+ 
+ // disable any preprocessor magic the IJG library might be doing with the "const" keyword
+ #ifdef const
+@@ -78,7 +76,7 @@ struct DJEIJG12ErrorStruct
+ void DJEIJG12ErrorExit(j_common_ptr);
+ void DJEIJG12EmitMessage(j_common_ptr cinfo, int msg_level);
+ void DJEIJG12initDestination(j_compress_ptr cinfo);
+-ijg_boolean DJEIJG12emptyOutputBuffer(j_compress_ptr cinfo);
++boolean DJEIJG12emptyOutputBuffer(j_compress_ptr cinfo);
+ void DJEIJG12termDestination(j_compress_ptr cinfo);
+ 
+ // helper methods to fix old-style casts warnings
+@@ -118,7 +116,7 @@ void DJEIJG12initDestination(j_compress_ptr cinfo)
+   encoder->initDestination(cinfo);
+ }
+ 
+-ijg_boolean DJEIJG12emptyOutputBuffer(j_compress_ptr cinfo)
++boolean DJEIJG12emptyOutputBuffer(j_compress_ptr cinfo)
+ {
+   DJCompressIJG12Bit *encoder = OFreinterpret_cast(DJCompressIJG12Bit*, cinfo->client_data);
+   return encoder->emptyOutputBuffer(cinfo);
+@@ -144,10 +142,10 @@ static void jpeg_simple_spectral_selection(j_compress_ptr cinfo)
+   int nscans = 0;
+ 
+   /* Safety check to ensure start_compress not called yet. */
+-  if (cinfo->global_state != CSTATE_START)
+-  {
+-    OF_ERREXIT1(cinfo, JERR_BAD_STATE, cinfo->global_state);
+-  }
++  // if (cinfo->global_state != CSTATE_START)
++  // {
++  //   OF_ERREXIT1(cinfo, JERR_BAD_STATE, cinfo->global_state);
++  // }
+ 
+   if (ncomps == 3 && cinfo->jpeg_color_space == JCS_YCbCr) nscans = 7;
+   else nscans = 1 + 2 * ncomps;	/* 1 DC scan; 2 AC scans per component */
+@@ -407,7 +405,7 @@ OFCondition DJCompressIJG12Bit::encode(
+       break;
+     case EJM_lossless:
+      // always disables any kind of color space conversion
+-     jpeg_simple_lossless(&cinfo,psv,pt);
++     jpeg_enable_lossless(&cinfo,psv,pt);
+      break;
+   }
+ 
+@@ -447,14 +445,15 @@ OFCondition DJCompressIJG12Bit::encode(
+     cinfo.comp_info[sfi].v_samp_factor = 1;
+   }
+ 
+-  JSAMPROW row_pointer[1];
++  J12SAMPROW row_pointer[1];
++  cinfo.data_precision = 12;
+   jpeg_start_compress(&cinfo,TRUE);
+   int row_stride = columns * samplesPerPixel;
+   while (cinfo.next_scanline < cinfo.image_height)
+   {
+     // JSAMPLE is signed, typecast to avoid a warning
+-    row_pointer[0] = OFreinterpret_cast(JSAMPLE*, image_buffer + (cinfo.next_scanline * row_stride));
+-    jpeg_write_scanlines(&cinfo, row_pointer, 1);
++    row_pointer[0] = OFreinterpret_cast(J12SAMPLE*, image_buffer + (cinfo.next_scanline * row_stride));
++    jpeg12_write_scanlines(&cinfo, row_pointer, 1);
+   }
+   jpeg_finish_compress(&cinfo);
+   jpeg_destroy_compress(&cinfo);
+diff --git a/dcmjpeg/libsrc/djeijg16.cc b/dcmjpeg/libsrc/djeijg16.cc
+index 68ea601ee..c81aebdb7 100644
+--- a/dcmjpeg/libsrc/djeijg16.cc
++++ b/dcmjpeg/libsrc/djeijg16.cc
+@@ -41,11 +41,9 @@
+ #define IJGE16_BLOCKSIZE 16384
+ 
+ BEGIN_EXTERN_C
+-#define boolean ijg_boolean
+-#include "jpeglib16.h"
+-#include "jerror16.h"
+-#include "jpegint16.h"
+-#undef boolean
++#include "jpeglib.h"
++#include "jerror.h"
++// #include "jpegint.h"
+ 
+ // disable any preprocessor magic the IJG library might be doing with the "const" keyword
+ #ifdef const
+@@ -79,7 +77,7 @@ struct DJEIJG16ErrorStruct
+ void DJEIJG16ErrorExit(j_common_ptr);
+ void DJEIJG16EmitMessage(j_common_ptr cinfo, int msg_level);
+ void DJEIJG16initDestination(j_compress_ptr cinfo);
+-ijg_boolean DJEIJG16emptyOutputBuffer(j_compress_ptr cinfo);
++boolean DJEIJG16emptyOutputBuffer(j_compress_ptr cinfo);
+ void DJEIJG16termDestination(j_compress_ptr cinfo);
+ 
+ // helper methods to fix old-style casts warnings
+@@ -120,7 +118,7 @@ void DJEIJG16initDestination(j_compress_ptr cinfo)
+   encoder->initDestination(cinfo);
+ }
+ 
+-ijg_boolean DJEIJG16emptyOutputBuffer(j_compress_ptr cinfo)
++boolean DJEIJG16emptyOutputBuffer(j_compress_ptr cinfo)
+ {
+   DJCompressIJG16Bit *encoder = OFreinterpret_cast(DJCompressIJG16Bit*, cinfo->client_data);
+   return encoder->emptyOutputBuffer(cinfo);
+@@ -241,7 +239,7 @@ OFCondition DJCompressIJG16Bit::encode(
+   {
+     case EJM_lossless:
+      // always disables any kind of color space conversion
+-     jpeg_simple_lossless(&cinfo,psv,pt);
++     jpeg_enable_lossless(&cinfo,psv,pt);
+      break;
+     default:
+      return makeOFCondition(OFM_dcmjpeg, EJCode_IJG16_Compression, OF_error, "JPEG with 16 bits/sample only allowed with lossless compression");
+@@ -284,14 +282,15 @@ OFCondition DJCompressIJG16Bit::encode(
+     cinfo.comp_info[sfi].v_samp_factor = 1;
+   }
+ 
+-  JSAMPROW row_pointer[1];
++  J16SAMPROW row_pointer[1];
++  cinfo.data_precision = 16;
+   jpeg_start_compress(&cinfo,TRUE);
+   int row_stride = columns * samplesPerPixel;
+   while (cinfo.next_scanline < cinfo.image_height)
+   {
+     // JSAMPLE might be signed, typecast to avoid a warning
+-    row_pointer[0] = OFreinterpret_cast(JSAMPLE*, image_buffer + (cinfo.next_scanline * row_stride));
+-    jpeg_write_scanlines(&cinfo, row_pointer, 1);
++    row_pointer[0] = OFreinterpret_cast(J16SAMPLE*, image_buffer + (cinfo.next_scanline * row_stride));
++    jpeg16_write_scanlines(&cinfo, row_pointer, 1);
+   }
+   jpeg_finish_compress(&cinfo);
+   jpeg_destroy_compress(&cinfo);
+diff --git a/dcmjpeg/libsrc/djeijg8.cc b/dcmjpeg/libsrc/djeijg8.cc
+index c5f40bf95..9b52418b6 100644
+--- a/dcmjpeg/libsrc/djeijg8.cc
++++ b/dcmjpeg/libsrc/djeijg8.cc
+@@ -41,11 +41,9 @@
+ #define IJGE8_BLOCKSIZE 16384
+ 
+ BEGIN_EXTERN_C
+-#define boolean ijg_boolean
+-#include "jpeglib8.h"
+-#include "jerror8.h"
+-#include "jpegint8.h"
+-#undef boolean
++#include "jpeglib.h"
++#include "jerror.h"
++// #include "jpegint.h"
+ 
+ // disable any preprocessor magic the IJG library might be doing with the "const" keyword
+ #ifdef const
+@@ -78,7 +76,7 @@ struct DJEIJG8ErrorStruct
+ void DJEIJG8ErrorExit(j_common_ptr);
+ void DJEIJG8EmitMessage(j_common_ptr cinfo, int msg_level);
+ void DJEIJG8initDestination(j_compress_ptr cinfo);
+-ijg_boolean DJEIJG8emptyOutputBuffer(j_compress_ptr cinfo);
++boolean DJEIJG8emptyOutputBuffer(j_compress_ptr cinfo);
+ void DJEIJG8termDestination(j_compress_ptr cinfo);
+ 
+ // helper methods to fix old-style casts warnings
+@@ -119,7 +117,7 @@ void DJEIJG8initDestination(j_compress_ptr cinfo)
+   encoder->initDestination(cinfo);
+ }
+ 
+-ijg_boolean DJEIJG8emptyOutputBuffer(j_compress_ptr cinfo)
++boolean DJEIJG8emptyOutputBuffer(j_compress_ptr cinfo)
+ {
+   DJCompressIJG8Bit *encoder = OFreinterpret_cast(DJCompressIJG8Bit*, cinfo->client_data);
+   return encoder->emptyOutputBuffer(cinfo);
+@@ -145,10 +143,10 @@ static void jpeg_simple_spectral_selection(j_compress_ptr cinfo)
+   int nscans = 0;
+ 
+   /* Safety check to ensure start_compress not called yet. */
+-  if (cinfo->global_state != CSTATE_START)
+-  {
+-    OF_ERREXIT1(cinfo, JERR_BAD_STATE, cinfo->global_state);
+-  }
++  // if (cinfo->global_state != CSTATE_START)
++  // {
++  //   OF_ERREXIT1(cinfo, JERR_BAD_STATE, cinfo->global_state);
++  // }
+ 
+   if (ncomps == 3 && cinfo->jpeg_color_space == JCS_YCbCr) nscans = 7;
+   else nscans = 1 + 2 * ncomps;	/* 1 DC scan; 2 AC scans per component */
+@@ -399,7 +397,8 @@ OFCondition DJCompressIJG8Bit::encode(
+       break;
+     case EJM_sequential:
+       jpeg_set_quality(&cinfo, quality, 0);
+-      cinfo.force_extended_sequential_marker = TRUE;
++      cinfo.comp_info[0].dc_tbl_no = 2; // Force extended markers by denying baseline
++      // cinfo.force_extended_sequential_marker = TRUE;
+       break;
+     case EJM_spectralSelection:
+       jpeg_set_quality(&cinfo, quality, 0);
+@@ -411,7 +410,7 @@ OFCondition DJCompressIJG8Bit::encode(
+       break;
+     case EJM_lossless:
+      // always disables any kind of color space conversion
+-     jpeg_simple_lossless(&cinfo,psv,pt);
++     jpeg_enable_lossless(&cinfo,psv,pt);
+      break;
+   }
+ 
