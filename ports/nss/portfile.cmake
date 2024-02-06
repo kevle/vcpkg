@@ -4,7 +4,7 @@ string(REPLACE "." "_" V_URL ${VERSION})
 vcpkg_download_distfile(ARCHIVE
     URLS "https://ftp.mozilla.org/pub/security/nss/releases/NSS_${V_URL}_RTM/src/nss-${VERSION}.tar.gz"
     FILENAME "nss-${VERSION}.tar.gz"
-    SHA512 4ec7b94e537df109638b821f3a7e3b7bf31d89c3739a6e4c85cad4fab876390ae482971d6f66198818400f467661e86f39dc1d2a4a88077fd81e3a0b7ed64110
+    SHA512 1ad6ac6ff626dc187f42b313c1088ef4b4ac0ee3e156d37824c36e778faa977e8f132302ac00d74aa8f9903e791a0fee6cecb5244d2601e0825cc125b6f33d6a
 )
 
 vcpkg_extract_source_archive(
@@ -14,6 +14,7 @@ vcpkg_extract_source_archive(
     PATCHES
         "01-nspr-no-lib-prefix.patch"
         "02-gen-debug-info-for-release.patch"
+        "03-nssutil-dependency.patch"
 )
 
 # setup mozbuild for windows
@@ -40,28 +41,16 @@ if (VCPKG_TARGET_IS_WINDOWS)
     find_program(MOZBUILD_PYTHON python PATHS "${MOZBUILD_PYTHON_ROOT}" NO_DEFAULT_PATH REQUIRED)
     message(STATUS "Found python: ${MOZBUILD_PYTHON}")
     vcpkg_add_to_path(PREPEND "${MOZBUILD_PYTHON_ROOT}")
-
-    # setup paths
-    execute_process(
-        COMMAND ${MOZBUILD_BASH} -c pwd
-        WORKING_DIRECTORY ${CURRENT_INSTALLED_DIR}/include
-        OUTPUT_VARIABLE VCPKG_INCLUDEDIR
-        OUTPUT_STRIP_TRAILING_WHITESPACE
-    )
-    message(STATUS "Using headers from: ${VCPKG_INCLUDEDIR} arch: ${VCPKG_TARGET_ARCHITECTURE}")
-
-    execute_process(
-        COMMAND ${MOZBUILD_BASH} -c pwd
-        WORKING_DIRECTORY ${CURRENT_INSTALLED_DIR}/lib
-        OUTPUT_VARIABLE VCPKG_LIBDIR
-        OUTPUT_STRIP_TRAILING_WHITESPACE
-    )
-    message(STATUS "Using libraries from: ${VCPKG_LIBDIR} arch: ${VCPKG_TARGET_ARCHITECTURE}")
-
 else()
     # TODO: setup non-windows build environment
 
 endif()
+
+# setup paths
+file(REAL_PATH "${CURRENT_INSTALLED_DIR}/include" VCPKG_INCLUDEDIR)
+file(REAL_PATH "${CURRENT_INSTALLED_DIR}/lib" VCPKG_LIBDIR)
+message(STATUS "Using headers from: ${VCPKG_INCLUDEDIR} arch: ${VCPKG_TARGET_ARCHITECTURE}")
+message(STATUS "Using libraries from: ${VCPKG_LIBDIR} arch: ${VCPKG_TARGET_ARCHITECTURE}")
 
 # setup gyp-next
 set(GYP_NEXT_ROOT "${CURRENT_HOST_INSTALLED_DIR}/tools/gyp-next")
@@ -232,3 +221,5 @@ endif()
 
 # License
 file(INSTALL "${SOURCE_PATH}/nss/COPYING" DESTINATION "${CURRENT_PACKAGES_DIR}/share/nss" RENAME copyright)
+
+vcpkg_fixup_pkgconfig()

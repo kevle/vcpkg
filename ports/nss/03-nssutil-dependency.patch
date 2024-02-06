@@ -1,0 +1,14 @@
+diff --git a/nss/lib/pk11wrap/pk11wrap.gyp b/nss/lib/pk11wrap/pk11wrap.gyp
+index 03bb522..871b958 100644
+--- a/nss/lib/pk11wrap/pk11wrap.gyp
++++ b/nss/lib/pk11wrap/pk11wrap.gyp
+@@ -55,6 +55,9 @@
+           'pk11util.c'
+         ],
+       },
++      'dependencies': [
++        '<(DEPTH)/lib/util/util.gyp:nssutil',
++      ],
+     },
+   ],
+   'target_defaults': {
