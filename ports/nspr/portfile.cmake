@@ -11,22 +11,25 @@ vcpkg_extract_source_archive(
     SOURCE_BASE "${VERSION}"
 )
 
-set(MOZBUILD_ROOT "${CURRENT_HOST_INSTALLED_DIR}/tools/mozbuild")
+if(WIN32)
+    set(MOZBUILD_ROOT "${CURRENT_HOST_INSTALLED_DIR}/tools/mozbuild")
 
-set(MOZBUILD_BINDIR "${MOZBUILD_ROOT}/bin")
-vcpkg_add_to_path("${MOZBUILD_BINDIR}")
+    set(MOZBUILD_BINDIR "${MOZBUILD_ROOT}/bin")
+    vcpkg_add_to_path("${MOZBUILD_BINDIR}")
 
-set(MOZBUILD_MSYS_ROOT "${MOZBUILD_ROOT}/msys")
-vcpkg_add_to_path(PREPEND "${MOZBUILD_MSYS_ROOT}")
-
-set(OPTIONS "")
-if (VCPKG_CRT_LINKAGE STREQUAL "dynamic")
-    list(APPEND OPTIONS "--disable-static-rtl")
-else()
-    list(APPEND OPTIONS "--enable-static-rtl")
+    set(MOZBUILD_MSYS_ROOT "${MOZBUILD_ROOT}/msys")
+    vcpkg_add_to_path(PREPEND "${MOZBUILD_MSYS_ROOT}")
 endif()
 
-list(APPEND OPTIONS "--enable-win32-target=win95")
+set(OPTIONS "")
+if(WIN32)
+    if (VCPKG_CRT_LINKAGE STREQUAL "dynamic")
+        list(APPEND OPTIONS "--disable-static-rtl")
+    else()
+        list(APPEND OPTIONS "--enable-static-rtl")
+    endif()
+    list(APPEND OPTIONS "--enable-win32-target=win95")
+endif()
 
 if (VCPKG_TARGET_ARCHITECTURE STREQUAL "x64")
     list(APPEND OPTIONS "--enable-64bit")
@@ -36,13 +39,17 @@ else()
     message(FATAL_ERROR "Unsupported arch: ${VCPKG_TARGET_ARCHITECTURE}")
 endif()
 
-set(OPTIONS_DEBUG
-    "--enable-debug-rtl"
-)
 
-set(OPTIONS_RELEASE
-    "--disable-debug-rtl"
-)
+set(OPTIONS_DEBUG "")
+set(OPTIONS_RELEASE "")
+if(WIN32)
+    list(APPEND OPTIONS_DEBUG
+        "--enable-debug-rtl"
+    )
+    list(APPEND OPTIONS_RELEASE
+        "--disable-debug-rtl"
+    )
+endif(WIN32)
 
 vcpkg_configure_make(
     SOURCE_PATH "${SOURCE_PATH}"
@@ -97,3 +104,5 @@ endif()
 
 # Copy license
 file(INSTALL "${SOURCE_PATH}/nspr/LICENSE" DESTINATION "${CURRENT_PACKAGES_DIR}/share/${PORT}" RENAME copyright)
+
+vcpkg_fixup_pkgconfig()

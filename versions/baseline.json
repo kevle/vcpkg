@@ -6098,7 +6098,7 @@
     },
     "nspr": {
       "baseline": "4.35",
-      "port-version": 4
+      "port-version": 5
     },
     "nss": {
       "baseline": "3.87",
